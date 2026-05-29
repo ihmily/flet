@@ -1,0 +1,112 @@
+name: Build Windows Client
+
+on:
+  workflow_dispatch:
+    inputs:
+      flutter_version:
+        description: Flutter version to use
+        required: false
+        default: "3.29.3"
+      package_version:
+        description: Client version passed to flutter --build-name
+        required: false
+      build_number:
+        description: Build number passed to flutter --build-number
+        required: false
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*"
+    paths:
+      - ".github/workflows/build-windows-client.yml"
+      - "client/**"
+      - "packages/flet/**"
+      - "sdk/python/packages/flet-desktop/**"
+  pull_request:
+    paths:
+      - ".github/workflows/build-windows-client.yml"
+      - "client/**"
+      - "packages/flet/**"
+      - "sdk/python/packages/flet-desktop/**"
+
+permissions:
+  contents: write
+
+jobs:
+  build_windows:
+    name: Build Windows client
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve build inputs
+        id: build_vars
+        shell: pwsh
+        run: |
+          $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+          $inputs = $event.inputs
+
+          $flutterVersion = if ($null -ne $inputs -and $inputs.flutter_version) {
+            [string]$inputs.flutter_version
+          } else {
+            "3.29.3"
+          }
+
+          $packageVersion = if ($null -ne $inputs -and $inputs.package_version) {
+            [string]$inputs.package_version
+          } else {
+            ""
+          }
+
+          if ([string]::IsNullOrWhiteSpace($packageVersion)) {
+            if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -match '^v(\d+\.\d+\.\d+(?:\.\d+)?)$') {
+              $packageVersion = $Matches[1]
+            } else {
+              $packageVersion = "0.28.3"
+            }
+          }
+
+          $buildNumber = if ($null -ne $inputs -and $inputs.build_number) {
+            [string]$inputs.build_number
+          } else {
+            ""
+          }
+
+          if ([string]::IsNullOrWhiteSpace($buildNumber)) {
+            $buildNumber = $env:GITHUB_RUN_NUMBER
+          }
+
+          "flutter_version=$flutterVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "package_version=$packageVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "build_number=$buildNumber" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ steps.build_vars.outputs.flutter_version }}
+          cache: true
+
+      - name: Show Flutter version
+        shell: pwsh
+        run: flutter --version
+
+      - name: Build Windows package
+        shell: pwsh
+        run: .\client\build-windows.ps1 -Version "${{ steps.build_vars.outputs.package_version }}" -BuildNumber "${{ steps.build_vars.outputs.build_number }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: flet-windows-${{ steps.build_vars.outputs.package_version }}
+          if-no-files-found: error
+          path: client/flet-windows.zip
+
+      - name: Publish GitHub release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: client/flet-windows.zip
+          overwrite_files: true
