@@ -36,7 +36,9 @@ permissions:
 jobs:
   build_windows:
     name: Build Windows client
-    runs-on: windows-latest
+    # Pin to Windows Server 2022 so Flutter builds against Visual Studio 2022.
+    # `windows-latest` is moving to newer images, which can break older Flutter toolchains.
+    runs-on: windows-2022
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -92,6 +94,10 @@ jobs:
       - name: Show Flutter version
         shell: pwsh
         run: flutter --version
+
+      - name: Show Flutter doctor
+        shell: pwsh
+        run: flutter doctor -v
 
       - name: Build Windows package
         shell: pwsh

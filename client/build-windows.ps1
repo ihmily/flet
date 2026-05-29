@@ -51,6 +51,7 @@ $releaseDir = Join-Path $runnerDir "Release"
 $stagingRoot = Join-Path $runnerDir "package"
 $packageDir = Join-Path $stagingRoot "flet"
 $zipPath = Join-Path $scriptDir "flet-windows.zip"
+$buildWindowsDir = Join-Path $scriptDir "build\windows"
 $runtimeDlls = @(
     "msvcp140.dll",
     "vcruntime140.dll",
@@ -62,6 +63,8 @@ Write-Host "Building Windows client version $Version+$BuildNumber"
 Push-Location $scriptDir
 try {
     flutter config --enable-windows-desktop | Out-Host
+    # Clear generated CMake state so the build doesn't reuse an older VS generator.
+    Remove-DirectoryIfExists -Path $buildWindowsDir
     flutter build windows --build-name="$Version" --build-number="$BuildNumber" | Out-Host
 } finally {
     Pop-Location
